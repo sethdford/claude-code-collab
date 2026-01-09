@@ -23,7 +23,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "emulator": "firebase emulators:start",
-    "patch": "node patch-cli.js"
+    "patch": "node patch-cli.js",
+    "preflight": "./scripts/preflight.sh",
+    "test": "./scripts/test-suite.sh"
   },
   "dependencies": {
     "better-sqlite3": "^9.6.0",

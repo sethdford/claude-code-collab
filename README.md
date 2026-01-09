@@ -1,6 +1,59 @@
 # Claude Code Team Mode - Local Collaboration Server
 
+[![CI](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml/badge.svg)](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+
 A local implementation that enables hidden "team mode" features in Claude Code, allowing multiple Claude Code instances to collaborate on tasks.
+
+## Demo
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TERMINAL 1: Team Lead                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  $ ./run-lead.sh                                                            │
+│                                                                             │
+│  Claude Code Team Lead                                                      │
+│  =====================                                                      │
+│    Team:   dev-team                                                         │
+│    Agent:  lead (team-lead)                                                 │
+│    Server: http://localhost:3847                                            │
+│                                                                             │
+│  > Create a task for the worker to implement the login API                  │
+│                                                                             │
+│  ✓ Created task "Implement login API" (id: task-abc123)                     │
+│    Assigned to: worker-1                                                    │
+│    Status: pending                                                          │
+│                                                                             │
+│  > Broadcast to team: "Starting sprint, check your tasks"                   │
+│                                                                             │
+│  ✓ Broadcast sent to dev-team (2 agents online)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TERMINAL 2: Worker                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  $ ./run-worker.sh                                                          │
+│                                                                             │
+│  Claude Code Worker                                                         │
+│  =================                                                          │
+│    Team:   dev-team                                                         │
+│    Agent:  worker-1 (worker)                                                │
+│    Server: http://localhost:3847                                            │
+│                                                                             │
+│  📨 Broadcast from lead: "Starting sprint, check your tasks"                │
+│                                                                             │
+│  📋 New task assigned: "Implement login API"                                │
+│     Description: Create POST /api/login endpoint with JWT                   │
+│                                                                             │
+│  > Working on task task-abc123...                                           │
+│  > [implements the feature]                                                 │
+│  > Updating task status to completed                                        │
+│                                                                             │
+│  ✓ Task "Implement login API" marked as completed                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## What This Does
 
@@ -27,7 +80,15 @@ cd claude-collab-local
 npm install
 ```
 
-### 2. Run the Patch
+### 2. Run Preflight Check
+
+```bash
+npm run preflight
+```
+
+This verifies your environment is ready.
+
+### 3. Run the Patch
 
 ```bash
 npm run patch
@@ -38,7 +99,7 @@ This will:
 - Enable hidden feature flags
 - Inject local collaboration client
 
-### 3. Start the Server
+### 4. Start the Server
 
 ```bash
 npm start
@@ -46,7 +107,7 @@ npm start
 
 Server runs on `http://localhost:3847`
 
-### 4. Run Claude Code Instances
+### 5. Run Claude Code Instances
 
 **Terminal 1 - Team Lead:**
 ```bash
@@ -57,6 +118,16 @@ Server runs on `http://localhost:3847`
 ```bash
 ./run-worker.sh
 ```
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm start` | Start the collaboration server |
+| `npm run dev` | Start server with auto-reload |
+| `npm run patch` | Patch Claude Code CLI |
+| `npm run preflight` | Check environment readiness |
+| `npm run test` | Run the test suite |
 
 ## How It Works
 
@@ -193,6 +264,25 @@ npm install -g firebase-tools
 firebase emulators:start
 ```
 
+## Testing
+
+Run the comprehensive test suite to verify all components:
+
+```bash
+npm run test
+```
+
+The test suite validates:
+- Health check endpoints (2 tests)
+- Authentication with validation (5 tests)
+- User management (3 tests)
+- Chat operations (2 tests)
+- Message handling (4 tests)
+- Task management (7 tests)
+- Team broadcast (1 test)
+
+**Total: 24 tests**
+
 ## Troubleshooting
 
 ### "Cannot find Claude Code CLI"
@@ -203,6 +293,12 @@ Ensure the server is running (`npm start`) before launching Claude Code instance
 
 ### Database locked
 Only one server instance should run at a time. Check for existing processes on port 3847.
+
+### Run scripts fail with "server not running"
+The run scripts now verify the server is running first. Start it with `npm start`.
+
+### CLI path not found
+Set `CLAUDE_CODE_CLI_PATH` environment variable to the path of your patched CLI, or run `npm run patch` to download and patch.
 
 ## Disclaimer
 
