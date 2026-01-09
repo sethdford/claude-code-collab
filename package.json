@@ -25,16 +25,21 @@
     "emulator": "firebase emulators:start",
     "patch": "node patch-cli.js",
     "preflight": "./scripts/preflight.sh",
-    "test": "./scripts/test-suite.sh"
+    "test": "./scripts/test-suite.sh",
+    "e2e": "./scripts/e2e-test.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "better-sqlite3": "^9.6.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "uuid": "^9.0.0",
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
     "firebase-tools": "^13.0.0"
   }
 }

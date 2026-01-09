@@ -1,6 +1,6 @@
 /**
- * Claude Code Local Collaboration Server v1.1
- * With SQLite persistence for messages and state.
+ * Claude Code Local Collaboration Server v1.2
+ * With SQLite persistence, JWT auth, and task dependencies.
  */
 
 const express = require('express');
@@ -11,6 +11,11 @@ const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
 const Database = require('better-sqlite3');
+const jwt = require('jsonwebtoken');
+
+// JWT configuration
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 const app = express();
 const PORT = process.env.PORT || 3847;
@@ -89,6 +94,39 @@ function validateEnum(value, name, allowed) {
     return { valid: false, error: `${name} must be one of: ${allowed.join(', ')}` };
   }
   return { valid: true };
+}
+
+// JWT authentication middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// Optional auth - attaches user if token present, but doesn't require it
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token) {
+    try {
+      req.user = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      // Invalid token, but we don't require auth
+    }
+  }
+  next();
 }
 
 // Initialize SQLite database
@@ -251,8 +289,16 @@ app.post('/auth', (req, res) => {
   const uid = crypto.createHash('sha256').update(teamName + ':' + handle).digest('hex').slice(0, 24);
   const now = new Date().toISOString();
   stmts.insertUser.run(uid, handle, teamName, agentType || 'worker', now, now);
+
+  // Generate JWT token
+  const token = jwt.sign(
+    { uid, handle, teamName, agentType: agentType || 'worker' },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+
   console.log('[AUTH] ' + handle + ' (' + (agentType || 'worker') + ') joined team "' + teamName + '"');
-  res.json({ uid, handle, teamName, agentType: agentType || 'worker' });
+  res.json({ uid, handle, teamName, agentType: agentType || 'worker', token });
 });
 
 // Get user
@@ -467,6 +513,24 @@ app.patch('/tasks/:taskId', (req, res) => {
 
   const task = stmts.getTask.get(taskId);
   if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  // Enforce task dependencies - can't resolve if blocked by unresolved tasks
+  if (status === 'resolved' && task.blocked_by) {
+    const blockedByIds = JSON.parse(task.blocked_by);
+    if (blockedByIds.length > 0) {
+      const unresolvedBlockers = blockedByIds.filter(blockerId => {
+        const blocker = stmts.getTask.get(blockerId);
+        return blocker && blocker.status !== 'resolved';
+      });
+      if (unresolvedBlockers.length > 0) {
+        return res.status(400).json({
+          error: 'Cannot resolve task: blocked by unresolved tasks',
+          blockedBy: unresolvedBlockers
+        });
+      }
+    }
+  }
+
   const now = new Date().toISOString();
   stmts.updateTaskStatus.run(status, now, taskId);
   console.log('[TASK] ' + taskId.slice(0, 8) + '... status -> ' + status);
