@@ -24,6 +24,7 @@
     "dev": "node --watch server.js",
     "emulator": "firebase emulators:start",
     "patch": "node patch-cli.js",
+    "patch:tasks": "node patch-tasks-only.js",
     "preflight": "./scripts/preflight.sh",
     "test": "./scripts/test-suite.sh",
     "e2e": "./scripts/e2e-test.sh",

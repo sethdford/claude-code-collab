@@ -71,7 +71,26 @@ Claude Code has hidden beta features for multi-agent collaboration that require 
 | Team Collaboration | `NW1()` | Real-time messaging between Claude Code instances |
 | Discover Command | `SQ1()` | `/discover` command for feature discovery |
 
-## Quick Start
+## Choose Your Setup
+
+### Option A: Task Tools Only (No Server)
+
+Just want `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`? No server needed:
+
+```bash
+npm install
+npm run patch:tasks
+```
+
+Done! Run `claude` and ask it to create tasks. Tasks are stored locally.
+
+### Option B: Full Team Collaboration (Multi-Agent)
+
+Want multiple Claude Code instances working together as a team? Continue below.
+
+---
+
+## Quick Start (Full Team Mode)
 
 ### 1. Install Dependencies
 
@@ -125,9 +144,11 @@ Server runs on `http://localhost:3847`
 |--------|-------------|
 | `npm start` | Start the collaboration server |
 | `npm run dev` | Start server with auto-reload |
-| `npm run patch` | Patch Claude Code CLI |
+| `npm run patch` | Patch Claude Code CLI (full team mode) |
+| `npm run patch:tasks` | Patch Claude Code CLI (task tools only) |
 | `npm run preflight` | Check environment readiness |
-| `npm run test` | Run the test suite |
+| `npm run test` | Run test suite |
+| `npm run e2e` | Run end-to-end integration test |
 
 ## How It Works
 
