@@ -1,12 +1,44 @@
-# Claude Code Team Mode - Local Collaboration Server
+# Claude Code Collab
 
 [![CI](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml/badge.svg)](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 
-A local implementation that enables hidden "team mode" features in Claude Code, allowing multiple Claude Code instances to collaborate on tasks.
+**Unlock hidden task management and multi-agent collaboration features in Claude Code.**
 
-## Demo
+Claude Code has unreleased beta features for task management and team collaboration that are disabled by default. This project enables them locally - no cloud services required.
+
+---
+
+## What You Get
+
+### Task Tools (Works Standalone)
+
+Create, track, and manage tasks directly in Claude Code:
+
+```
+You: Create a task to refactor the authentication module
+
+Claude: I'll create that task for you.
+        [Uses TaskCreate tool]
+
+        Created task: "Refactor authentication module"
+        ID: task-7f3a2b
+        Status: open
+
+You: Show me all my tasks
+
+Claude: [Uses TaskList tool]
+
+        Tasks:
+        1. Refactor authentication module [open]
+        2. Write unit tests for API [in_progress]
+        3. Update documentation [resolved]
+```
+
+### Multi-Agent Collaboration (Requires Server)
+
+Run multiple Claude Code instances as a team:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -14,21 +46,13 @@ A local implementation that enables hidden "team mode" features in Claude Code, 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  $ ./run-lead.sh                                                            │
 │                                                                             │
-│  Claude Code Team Lead                                                      │
-│  =====================                                                      │
-│    Team:   dev-team                                                         │
-│    Agent:  lead (team-lead)                                                 │
-│    Server: http://localhost:3847                                            │
+│  > Assign a task to worker-1 to implement the login API                     │
 │                                                                             │
-│  > Create a task for the worker to implement the login API                  │
+│  Created task "Implement login API" assigned to worker-1                    │
 │                                                                             │
-│  ✓ Created task "Implement login API" (id: task-abc123)                     │
-│    Assigned to: worker-1                                                    │
-│    Status: pending                                                          │
+│  > Broadcast: "Sprint started - check your tasks!"                          │
 │                                                                             │
-│  > Broadcast to team: "Starting sprint, check your tasks"                   │
-│                                                                             │
-│  ✓ Broadcast sent to dev-team (2 agents online)                             │
+│  Broadcast sent to dev-team (2 agents online)                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -36,295 +60,358 @@ A local implementation that enables hidden "team mode" features in Claude Code, 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  $ ./run-worker.sh                                                          │
 │                                                                             │
-│  Claude Code Worker                                                         │
-│  =================                                                          │
-│    Team:   dev-team                                                         │
-│    Agent:  worker-1 (worker)                                                │
-│    Server: http://localhost:3847                                            │
+│  [Received broadcast]: "Sprint started - check your tasks!"                 │
 │                                                                             │
-│  📨 Broadcast from lead: "Starting sprint, check your tasks"                │
+│  [New task assigned]: "Implement login API"                                 │
 │                                                                             │
-│  📋 New task assigned: "Implement login API"                                │
-│     Description: Create POST /api/login endpoint with JWT                   │
+│  > Working on task... [implements feature] ... Done!                        │
 │                                                                             │
-│  > Working on task task-abc123...                                           │
-│  > [implements the feature]                                                 │
-│  > Updating task status to completed                                        │
-│                                                                             │
-│  ✓ Task "Implement login API" marked as completed                           │
+│  Task "Implement login API" marked as completed                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## What This Does
+---
 
-Claude Code has hidden beta features for multi-agent collaboration that require Firebase. This project:
+## Quick Start
 
-1. **Patches Claude Code** to enable hidden feature flags
-2. **Provides a local server** that replaces Firebase with Express + WebSocket + SQLite
-3. **Enables team mode** where a "team lead" can delegate tasks to "worker" agents
+### Option A: Task Tools Only (Recommended for Most Users)
 
-## Hidden Features Enabled
-
-| Feature | Function | Description |
-|---------|----------|-------------|
-| Task Tools | `$q()` | Enables `TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList` tools |
-| Team Collaboration | `NW1()` | Real-time messaging between Claude Code instances |
-| Discover Command | `SQ1()` | `/discover` command for feature discovery |
-
-## Choose Your Setup
-
-### Option A: Task Tools Only (No Server)
-
-Just want `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`? No server needed:
+Just want task management? No server needed:
 
 ```bash
+git clone https://github.com/sethdford/claude-code-collab.git
+cd claude-code-collab
 npm install
 npm run patch:tasks
 ```
 
-Done! Run `claude` and ask it to create tasks. Tasks are stored locally.
+That's it! Now run `claude` and try:
+- "Create a task to review the API code"
+- "List all my tasks"
+- "Mark task-xyz as completed"
 
-### Option B: Full Team Collaboration (Multi-Agent)
+### Option B: Full Team Collaboration
 
-Want multiple Claude Code instances working together as a team? Continue below.
-
----
-
-## Quick Start (Full Team Mode)
-
-### 1. Install Dependencies
+Want multiple Claude instances working together? You'll need the server:
 
 ```bash
-cd claude-collab-local
+git clone https://github.com/sethdford/claude-code-collab.git
+cd claude-code-collab
 npm install
+npm run patch          # Full patch with collaboration features
+npm start              # Start the local server
 ```
 
-### 2. Run Preflight Check
+Then in separate terminals:
 
 ```bash
-npm run preflight
-```
-
-This verifies your environment is ready.
-
-### 3. Run the Patch
-
-```bash
-npm run patch
-```
-
-This will:
-- Download the latest Claude Code if needed
-- Enable hidden feature flags
-- Inject local collaboration client
-
-### 4. Start the Server
-
-```bash
-npm start
-```
-
-Server runs on `http://localhost:3847`
-
-### 5. Run Claude Code Instances
-
-**Terminal 1 - Team Lead:**
-```bash
+# Terminal 1: Team Lead
 ./run-lead.sh
-```
 
-**Terminal 2 - Worker:**
-```bash
+# Terminal 2: Worker
 ./run-worker.sh
 ```
 
-## Scripts
+---
+
+## Task Tools Reference
+
+| Tool | What It Does | Example Prompt |
+|------|--------------|----------------|
+| **TaskCreate** | Create a new task with title and description | "Create a task to fix the login bug" |
+| **TaskList** | Show all tasks with their status | "Show me all open tasks" |
+| **TaskGet** | Get details of a specific task | "What's the status of task-abc123?" |
+| **TaskUpdate** | Change task status or details | "Mark task-abc123 as resolved" |
+
+### Task Statuses
+
+```
+open ──────► in_progress ──────► resolved
+                │
+                └──────► blocked (by other tasks)
+```
+
+### Task Dependencies
+
+Tasks can block other tasks:
+
+```
+You: Create a task "Write tests" that's blocked by task-abc123
+
+Claude: Created task "Write tests"
+        Status: blocked
+        Blocked by: task-abc123 (must be resolved first)
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Your Machine                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌─────────────────┐              ┌─────────────────┐              │
+│   │  Claude Code    │              │  Claude Code    │              │
+│   │  (Team Lead)    │              │  (Worker)       │              │
+│   │                 │              │                 │              │
+│   │  - Create tasks │              │  - Receive tasks│              │
+│   │  - Broadcast    │              │  - Update status│              │
+│   │  - Monitor      │              │  - Send messages│              │
+│   └────────┬────────┘              └────────┬────────┘              │
+│            │                                │                       │
+│            │         WebSocket              │                       │
+│            │      ◄──────────────►          │                       │
+│            │                                │                       │
+│            └────────────┬───────────────────┘                       │
+│                         │                                           │
+│                         ▼                                           │
+│              ┌─────────────────────┐                                │
+│              │   Local Server      │                                │
+│              │   (Express + WS)    │                                │
+│              │                     │                                │
+│              │   localhost:3847    │                                │
+│              └──────────┬──────────┘                                │
+│                         │                                           │
+│                         ▼                                           │
+│              ┌─────────────────────┐                                │
+│              │   SQLite Database   │                                │
+│              │                     │                                │
+│              │   - Users/Agents    │                                │
+│              │   - Chats           │                                │
+│              │   - Messages        │                                │
+│              │   - Tasks           │                                │
+│              └─────────────────────┘                                │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Hidden Features Enabled
+
+This project patches Claude Code to enable these hidden feature flags:
+
+| Flag | Feature | What It Enables |
+|------|---------|-----------------|
+| `$q()` | Task Tools | TaskCreate, TaskGet, TaskUpdate, TaskList |
+| `NW1()` | Team Collaboration | Multi-agent messaging, broadcasts, team management |
+| `SQ1()` | Discover Command | `/discover` command for feature discovery |
+
+---
+
+## Scripts Reference
 
 | Script | Description |
 |--------|-------------|
+| `npm run patch:tasks` | Enable task tools only (no server needed) |
+| `npm run patch` | Enable all features (requires server) |
 | `npm start` | Start the collaboration server |
 | `npm run dev` | Start server with auto-reload |
-| `npm run patch` | Patch Claude Code CLI (full team mode) |
-| `npm run patch:tasks` | Patch Claude Code CLI (task tools only) |
-| `npm run preflight` | Check environment readiness |
-| `npm run test` | Run test suite |
+| `npm run test` | Run test suite (32 tests) |
 | `npm run e2e` | Run end-to-end integration test |
+| `npm run preflight` | Check environment readiness |
 
-## How It Works
+---
 
-### Architecture
+## Environment Variables
 
-```
-┌─────────────────┐     ┌─────────────────┐
-│  Claude Code    │     │  Claude Code    │
-│  (Team Lead)    │     │  (Worker)       │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         │   WebSocket/HTTP      │
-         └───────────┬───────────┘
-                     │
-              ┌──────┴──────┐
-              │   Local     │
-              │   Server    │
-              │  (Express)  │
-              └──────┬──────┘
-                     │
-              ┌──────┴──────┐
-              │   SQLite    │
-              │   Database  │
-              └─────────────┘
-```
-
-### Environment Variables
-
-| Variable | Description | Example |
+| Variable | Description | Default |
 |----------|-------------|---------|
 | `CLAUDE_CODE_TEAM_NAME` | Team identifier | `dev-team` |
-| `CLAUDE_CODE_AGENT_TYPE` | Role: `team-lead` or `worker` | `team-lead` |
-| `CLAUDE_CODE_AGENT_NAME` | Agent display name | `lead` |
+| `CLAUDE_CODE_AGENT_TYPE` | `team-lead` or `worker` | `worker` |
+| `CLAUDE_CODE_AGENT_NAME` | Display name | `worker-1` |
 | `CLAUDE_CODE_COLLAB_URL` | Server URL | `http://localhost:3847` |
+| `JWT_SECRET` | Auth token secret | Auto-generated |
+| `JWT_EXPIRES_IN` | Token expiry | `24h` |
 
-### API Endpoints
+---
+
+## API Documentation
+
+Full OpenAPI spec available at `docs/openapi.yaml`.
+
+### Key Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/auth` | POST | Register/authenticate agent |
-| `/chats` | GET | List agent's chats |
-| `/chats` | POST | Create new chat |
-| `/chats/:id/messages` | GET | Get messages in chat |
-| `/chats/:id/messages` | POST | Send message |
-| `/teams/:name/broadcast` | POST | Broadcast to team |
-| `/tasks` | GET/POST | Task management |
-| `/tasks/:id` | GET/PATCH | Individual task ops |
+| `/health` | GET | Server health check |
+| `/auth` | POST | Register/authenticate agent (returns JWT) |
+| `/users/:uid` | GET | Get user details |
+| `/teams/:name/agents` | GET | List team members |
+| `/teams/:name/broadcast` | POST | Send message to entire team |
+| `/chats` | POST | Create chat between two users |
+| `/chats/:id/messages` | GET/POST | Get/send messages |
+| `/tasks` | POST | Create a task |
+| `/tasks/:id` | GET/PATCH | Get/update task |
+| `/teams/:name/tasks` | GET | List team tasks |
 
-### Database Schema
+---
 
-```sql
--- Users/Agents
-CREATE TABLE users (
-  uid TEXT PRIMARY KEY,
-  handle TEXT UNIQUE,
-  display_name TEXT,
-  agent_type TEXT,
-  team_name TEXT,
-  created_at INTEGER
-);
+## Troubleshooting
 
--- Chats between agents
-CREATE TABLE chats (
-  id TEXT PRIMARY KEY,
-  participants TEXT,  -- JSON array
-  created_at INTEGER,
-  updated_at INTEGER
-);
+### "Cannot find Claude Code CLI"
 
--- Messages
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  chat_id TEXT,
-  from_uid TEXT,
-  text TEXT,
-  timestamp INTEGER,
-  status TEXT DEFAULT 'sent'
-);
+**Cause:** The patch script can't locate your Claude Code installation.
 
--- Tasks for delegation
-CREATE TABLE tasks (
-  id TEXT PRIMARY KEY,
-  title TEXT,
-  description TEXT,
-  status TEXT DEFAULT 'pending',
-  assigned_to TEXT,
-  created_by TEXT,
-  team_name TEXT,
-  created_at INTEGER,
-  updated_at INTEGER
-);
-```
-
-## Example: Multi-Agent Workflow
-
-1. **Team Lead creates a task:**
-   ```
-   You: Create a task for the worker to implement user authentication
-   Lead: [Uses TaskCreate tool to create task]
-   ```
-
-2. **Worker receives and works on task:**
-   ```
-   Worker: [Polls for new tasks, sees authentication task]
-   Worker: [Implements the feature]
-   Worker: [Updates task status to completed]
-   ```
-
-3. **Real-time communication:**
-   ```
-   Lead: [Broadcasts message to team]
-   Worker: [Receives message via WebSocket]
-   ```
-
-## Files
-
-| File | Description |
-|------|-------------|
-| `server.js` | Express + WebSocket server with SQLite |
-| `patch-cli.js` | Patches Claude Code CLI to enable features |
-| `run-lead.sh` | Script to run Claude Code as team lead |
-| `run-worker.sh` | Script to run Claude Code as worker |
-| `package.json` | Dependencies |
-
-## Firebase Emulator (Alternative)
-
-If you prefer full Firebase compatibility:
-
+**Fix:**
 ```bash
-# Install Firebase CLI
-npm install -g firebase-tools
+# Option 1: Install Claude Code globally
+npm install -g @anthropic-ai/claude-code
 
-# Start emulators
-firebase emulators:start
+# Option 2: Run via npx first (creates local cache)
+npx @anthropic-ai/claude-code --version
+
+# Option 3: Set path manually
+export CLAUDE_CODE_CLI_PATH=/path/to/cli.js
+npm run patch
 ```
+
+### "Server not running" when using run-lead.sh or run-worker.sh
+
+**Cause:** The collaboration server isn't started.
+
+**Fix:**
+```bash
+# Start the server first
+npm start
+
+# Then in another terminal
+./run-lead.sh
+```
+
+### WebSocket connection fails
+
+**Cause:** Server not running or wrong URL.
+
+**Fix:**
+```bash
+# Check server is running
+curl http://localhost:3847/health
+
+# Should return: {"status":"ok","persistence":"sqlite",...}
+```
+
+### "Database locked" error
+
+**Cause:** Multiple server instances trying to access the same database.
+
+**Fix:**
+```bash
+# Find and kill existing processes
+lsof -i :3847
+kill <PID>
+
+# Or just restart
+pkill -f "node.*server.js"
+npm start
+```
+
+### Patch says "already enabled"
+
+**Cause:** You've already patched this Claude Code installation.
+
+**Fix:** This is fine! The features are enabled. Just run `claude`.
+
+### Tasks not persisting
+
+**Cause:** Using task-tools-only mode (no server).
+
+**Note:** In task-tools-only mode, tasks are managed by Claude Code internally. For persistent, shared tasks across sessions, use full team mode with the server.
+
+### Windows: Scripts don't work
+
+**Cause:** Shell scripts are Unix-only.
+
+**Fix:** Use the Windows batch files:
+```cmd
+run-lead.bat
+run-worker.bat
+```
+
+### "Invalid or expired token" error
+
+**Cause:** JWT token expired (default: 24 hours).
+
+**Fix:** Re-authenticate by restarting your Claude Code instance.
+
+---
 
 ## Testing
 
-Run the comprehensive test suite to verify all components:
+Run the full test suite:
 
 ```bash
 npm run test
 ```
 
-The test suite validates:
-- Health check endpoints (2 tests)
-- Authentication with validation (5 tests)
-- User management (3 tests)
-- Chat operations (2 tests)
-- Message handling (4 tests)
-- Task management (7 tests)
-- Team broadcast (1 test)
+**Coverage: 32 tests**
+- Health checks (2)
+- Authentication (5)
+- User management (3)
+- Chat operations (2)
+- Message handling (4)
+- Mark as read validation (2)
+- Task management (7)
+- Task dependencies (5)
+- Broadcast (1)
+- WebSocket (2, requires websocat)
+- Rate limiting (1)
 
-**Total: 24 tests**
+Run end-to-end integration test:
 
-## Troubleshooting
+```bash
+npm run e2e
+```
 
-### "Cannot find Claude Code CLI"
-Run `npm pack @anthropic-ai/claude-code` first, or install Claude Code globally.
+---
 
-### WebSocket connection fails
-Ensure the server is running (`npm start`) before launching Claude Code instances.
+## Project Files
 
-### Database locked
-Only one server instance should run at a time. Check for existing processes on port 3847.
+| File | Description |
+|------|-------------|
+| `server.js` | Express + WebSocket server (v1.2) |
+| `patch-cli.js` | Full patch (all features) |
+| `patch-tasks-only.js` | Lightweight patch (task tools only) |
+| `run-lead.sh` / `.bat` | Run as team lead |
+| `run-worker.sh` / `.bat` | Run as worker |
+| `docs/openapi.yaml` | API specification |
+| `scripts/test-suite.sh` | Comprehensive tests |
+| `scripts/e2e-test.sh` | End-to-end test |
 
-### Run scripts fail with "server not running"
-The run scripts now verify the server is running first. Start it with `npm start`.
+---
 
-### CLI path not found
-Set `CLAUDE_CODE_CLI_PATH` environment variable to the path of your patched CLI, or run `npm run patch` to download and patch.
+## How It Works
+
+1. **Patch Phase:** The patch script finds your Claude Code CLI, enables hidden feature flags (`$q`, `NW1`, `SQ1`), and injects code that redirects Firebase calls to your local server.
+
+2. **Server Phase:** The local Express server provides REST APIs and WebSocket connections that mimic Firebase's behavior, storing data in SQLite.
+
+3. **Runtime Phase:** When Claude Code runs, it thinks it's talking to Firebase but actually communicates with your local server.
+
+---
 
 ## Disclaimer
 
-This project reverse-engineers hidden features in Claude Code for educational purposes. These features are disabled by default for a reason - they may be unstable, incomplete, or change without notice. Use at your own risk.
+This project reverse-engineers hidden features in Claude Code for educational and experimental purposes. These features are disabled by default because they may be:
+
+- Unstable or incomplete
+- Subject to change without notice
+- Not officially supported
+
+**Use at your own risk.** This is not affiliated with or endorsed by Anthropic.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT
+MIT - See [LICENSE](LICENSE)
+
+---
+
+**Questions?** Open an issue on [GitHub](https://github.com/sethdford/claude-code-collab/issues).
