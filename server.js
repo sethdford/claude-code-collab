@@ -19,6 +19,49 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'collab.db');
 app.use(cors());
 app.use(express.json());
 
+// Simple rate limiting
+const rateLimits = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const RATE_LIMIT_MAX = 100; // 100 requests per minute per IP
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const now = Date.now();
+
+  if (!rateLimits.has(ip)) {
+    rateLimits.set(ip, { count: 1, windowStart: now });
+    return next();
+  }
+
+  const limit = rateLimits.get(ip);
+  if (now - limit.windowStart > RATE_LIMIT_WINDOW) {
+    // Reset window
+    limit.count = 1;
+    limit.windowStart = now;
+    return next();
+  }
+
+  limit.count++;
+  if (limit.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+
+  next();
+}
+
+// Apply rate limiting to all routes
+app.use(rateLimit);
+
+// Cleanup old rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, limit] of rateLimits) {
+    if (now - limit.windowStart > RATE_LIMIT_WINDOW * 2) {
+      rateLimits.delete(ip);
+    }
+  }
+}, 300000);
+
 // Input validation helpers
 function validateRequired(obj, fields) {
   const missing = fields.filter(f => !obj[f] || (typeof obj[f] === 'string' && obj[f].trim() === ''));
@@ -245,7 +288,20 @@ app.get('/users/:uid/chats', (req, res) => {
 // Create/get chat
 app.post('/chats', (req, res) => {
   const { uid1, uid2 } = req.body;
-  if (!uid1 || !uid2) return res.status(400).json({ error: 'uid1 and uid2 required' });
+
+  // Validate required fields
+  const reqCheck = validateRequired(req.body, ['uid1', 'uid2']);
+  if (!reqCheck.valid) return res.status(400).json({ error: reqCheck.error });
+
+  // Validate users exist
+  const user1 = stmts.getUser.get(uid1);
+  const user2 = stmts.getUser.get(uid2);
+  if (!user1) return res.status(404).json({ error: 'User uid1 not found' });
+  if (!user2) return res.status(404).json({ error: 'User uid2 not found' });
+
+  // Don't allow chat with self
+  if (uid1 === uid2) return res.status(400).json({ error: 'Cannot create chat with yourself' });
+
   const chatId = generateChatId(uid1, uid2);
   const existing = stmts.getChat.get(chatId);
   if (!existing) {
@@ -309,6 +365,17 @@ app.post('/chats/:chatId/messages', (req, res) => {
 app.post('/chats/:chatId/read', (req, res) => {
   const { chatId } = req.params;
   const { uid } = req.body;
+
+  // Validate required fields
+  if (!uid) {
+    return res.status(400).json({ error: 'uid is required' });
+  }
+
+  const chat = stmts.getChat.get(chatId);
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
   stmts.clearUnread.run(chatId, uid);
   db.prepare("UPDATE messages SET status = 'processed' WHERE chat_id = ? AND from_uid != ? AND status = 'pending'").run(chatId, uid);
   res.json({ success: true });

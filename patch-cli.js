@@ -109,6 +109,8 @@ async function _collabAuth() {
   }
 }
 
+let _subscribedChats = new Set();
+
 function _collabConnectWs() {
   if (_collabWs) return;
   if (!_collabUser) return;
@@ -120,6 +122,14 @@ function _collabConnectWs() {
 
     _collabWs.on('open', () => {
       console.log('[Collab] WebSocket connected');
+      // Re-subscribe to previously subscribed chats on reconnect
+      _subscribedChats.forEach(chatId => {
+        _collabWs.send(JSON.stringify({
+          type: 'subscribe',
+          chatId,
+          uid: _collabUser ? _collabUser.uid : null
+        }));
+      });
     });
 
     _collabWs.on('message', (data) => {
@@ -135,14 +145,18 @@ function _collabConnectWs() {
 
     _collabWs.on('close', () => {
       _collabWs = null;
+      console.log('[Collab] WebSocket closed, reconnecting in 5s...');
       setTimeout(_collabConnectWs, 5000);
     });
 
-    _collabWs.on('error', () => {});
+    _collabWs.on('error', (err) => {
+      console.log('[Collab] WebSocket error:', err.message);
+    });
   } catch (e) {}
 }
 
 function _collabSubscribe(chatId) {
+  _subscribedChats.add(chatId);
   if (_collabWs && _collabWs.readyState === 1) {
     _collabWs.send(JSON.stringify({
       type: 'subscribe',
@@ -196,6 +210,25 @@ function patch(cliPath) {
   // Write patched file
   fs.writeFileSync(cliPath, content);
   console.log('\n✓ Patched CLI written to:', cliPath);
+
+  // 3. Install ws dependency in Claude Code's directory
+  const cliDir = path.dirname(cliPath);
+  const wsPath = path.join(cliDir, 'node_modules', 'ws');
+  if (!fs.existsSync(wsPath)) {
+    console.log('\nInstalling ws dependency...');
+    try {
+      execFileSync('npm', ['install', 'ws', '--no-save'], {
+        cwd: cliDir,
+        stdio: 'pipe'
+      });
+      console.log('✓ Installed ws for WebSocket support');
+    } catch (e) {
+      console.log('⚠ Warning: Could not install ws. WebSocket features may not work.');
+      console.log('  Run manually: cd ' + cliDir + ' && npm install ws');
+    }
+  } else {
+    console.log('○ ws already installed');
+  }
 
   const scriptDir = path.dirname(process.argv[1]);
   console.log(`

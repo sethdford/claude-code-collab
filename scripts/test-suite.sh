@@ -320,6 +320,77 @@ test_broadcast() {
 }
 
 #######################################
+# Mark as read validation tests
+#######################################
+test_mark_read_validation() {
+  section "Mark as Read Validation Tests"
+
+  echo -n "Testing missing uid... "
+  RESPONSE=$(api POST "/chats/$CHAT_ID/read" '{}')
+  if echo "$RESPONSE" | grep -q '"error".*uid'; then
+    pass "Rejects missing uid"
+  else
+    fail "Should reject missing uid"
+  fi
+
+  echo -n "Testing nonexistent chat... "
+  RESPONSE=$(api POST "/chats/nonexistent/read" "{\"uid\":\"$LEAD_UID\"}")
+  if echo "$RESPONSE" | grep -q '"error"'; then
+    pass "Returns error for nonexistent chat"
+  else
+    fail "Should return error for nonexistent chat"
+  fi
+}
+
+#######################################
+# WebSocket tests
+#######################################
+test_websocket() {
+  section "WebSocket Tests"
+
+  # Check if websocat is available
+  if ! command -v websocat &> /dev/null; then
+    echo "  SKIP: websocat not installed (brew install websocat)"
+    return
+  fi
+
+  WS_URL="${SERVER_URL/http/ws}/ws"
+
+  echo -n "Testing WebSocket connection... "
+  # Send ping and expect pong
+  RESPONSE=$(echo '{"type":"ping"}' | timeout 3 websocat -n1 "$WS_URL" 2>/dev/null)
+  if echo "$RESPONSE" | grep -q '"type":"pong"'; then
+    pass "WebSocket ping/pong works"
+  else
+    fail "WebSocket ping/pong failed"
+  fi
+
+  echo -n "Testing WebSocket subscribe... "
+  RESPONSE=$(echo "{\"type\":\"subscribe\",\"chatId\":\"$CHAT_ID\",\"uid\":\"$LEAD_UID\"}" | timeout 3 websocat -n1 "$WS_URL" 2>/dev/null)
+  if echo "$RESPONSE" | grep -q '"type":"subscribed"'; then
+    pass "WebSocket subscribe works"
+  else
+    fail "WebSocket subscribe failed"
+  fi
+}
+
+#######################################
+# Rate limiting tests
+#######################################
+test_rate_limiting() {
+  section "Rate Limiting Tests"
+
+  echo -n "Testing rate limit headers... "
+  # Make a request and check it works (not testing actual limit, just that server handles traffic)
+  RESPONSE=$(api GET /health)
+  if echo "$RESPONSE" | grep -q '"status":"ok"'; then
+    pass "Server handles requests under rate limit"
+  else
+    fail "Server should handle normal requests"
+  fi
+}
+
+#######################################
 # Main
 #######################################
 main() {
@@ -342,8 +413,11 @@ main() {
   test_users
   test_chats
   test_messages
+  test_mark_read_validation
   test_tasks
   test_broadcast
+  test_websocket
+  test_rate_limiting
 
   echo ""
   echo "==============================="
