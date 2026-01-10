@@ -3,145 +3,122 @@
 [![CI](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml/badge.svg)](https://github.com/sethdford/claude-code-collab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
 
-**Unlock hidden task management and multi-agent collaboration features in Claude Code.**
+**Enterprise-ready multi-agent orchestration for Claude Code.**
 
-Claude Code has unreleased beta features for task management and team collaboration that are disabled by default. This project enables them locally - no cloud services required.
+A TypeScript server that enables team collaboration, task management, and **worker orchestration** across multiple Claude Code instances. Features MCP (Model Context Protocol) integration and support for Wave orchestration continuation loops.
+
+![Demo](demo.gif)
 
 ---
 
-## What You Get
+## What's New in v2.0
 
-### Task Tools (Works Standalone)
-
-Create, track, and manage tasks directly in Claude Code:
-
-```
-You: Create a task to refactor the authentication module
-
-Claude: I'll create that task for you.
-        [Uses TaskCreate tool]
-
-        Created task: "Refactor authentication module"
-        ID: task-7f3a2b
-        Status: open
-
-You: Show me all my tasks
-
-Claude: [Uses TaskList tool]
-
-        Tasks:
-        1. Refactor authentication module [open]
-        2. Write unit tests for API [in_progress]
-        3. Update documentation [resolved]
-```
-
-### Multi-Agent Collaboration (Requires Server)
-
-Run multiple Claude Code instances as a team:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TERMINAL 1: Team Lead                                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  $ ./run-lead.sh                                                            │
-│                                                                             │
-│  > Assign a task to worker-1 to implement the login API                     │
-│                                                                             │
-│  Created task "Implement login API" assigned to worker-1                    │
-│                                                                             │
-│  > Broadcast: "Sprint started - check your tasks!"                          │
-│                                                                             │
-│  Broadcast sent to dev-team (2 agents online)                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TERMINAL 2: Worker                                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  $ ./run-worker.sh                                                          │
-│                                                                             │
-│  [Received broadcast]: "Sprint started - check your tasks!"                 │
-│                                                                             │
-│  [New task assigned]: "Implement login API"                                 │
-│                                                                             │
-│  > Working on task... [implements feature] ... Done!                        │
-│                                                                             │
-│  Task "Implement login API" marked as completed                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+- **Full TypeScript rewrite** - Type-safe server with better error handling
+- **Worker Orchestration** - Spawn and control Claude Code worker instances programmatically
+- **MCP Integration** - 10 tools accessible via Model Context Protocol
+- **Wave Support** - Enables "Ralph Wiggum" continuation loops for iterative agent swarms
+- **NDJSON Streaming** - Bidirectional communication with worker processes
 
 ---
 
 ## Quick Start
 
-### Option A: Task Tools Only (Recommended for Most Users)
-
-Just want task management? No server needed:
-
 ```bash
+# Clone and install
 git clone https://github.com/sethdford/claude-code-collab.git
 cd claude-code-collab
 npm install
-npm run patch:tasks
+
+# Start the server
+./start.sh --background
+
+# Validate everything works
+./test-e2e.sh
+# Should show: All 11 tests passed!
 ```
 
-That's it! Now run `claude` and try:
-- "Create a task to review the API code"
-- "List all my tasks"
-- "Mark task-xyz as completed"
-
-### Option B: Full Team Collaboration
-
-Want multiple Claude instances working together? You'll need the server:
+### Server Management
 
 ```bash
-git clone https://github.com/sethdford/claude-code-collab.git
-cd claude-code-collab
-npm install
-npm run patch          # Full patch with collaboration features
-npm start              # Start the local server
-```
-
-Then in separate terminals:
-
-```bash
-# Terminal 1: Team Lead
-./run-lead.sh
-
-# Terminal 2: Worker
-./run-worker.sh
+./start.sh              # Start in foreground (see logs)
+./start.sh --background # Start as daemon
+./start.sh --status     # Check if running
+./start.sh --stop       # Stop daemon
 ```
 
 ---
 
-## Task Tools Reference
+## Features
 
-| Tool | What It Does | Example Prompt |
-|------|--------------|----------------|
-| **TaskCreate** | Create a new task with title and description | "Create a task to fix the login bug" |
-| **TaskList** | Show all tasks with their status | "Show me all open tasks" |
-| **TaskGet** | Get details of a specific task | "What's the status of task-abc123?" |
-| **TaskUpdate** | Change task status or details | "Mark task-abc123 as resolved" |
+### 1. Worker Orchestration
 
-### Task Statuses
+Spawn and control Claude Code instances programmatically:
+
+```bash
+# Spawn a worker
+curl -X POST http://localhost:3847/orchestrate/spawn \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"worker-1","teamName":"my-team","workingDir":"/path/to/project"}'
+
+# Send a task
+curl -X POST http://localhost:3847/orchestrate/send/worker-1 \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Create a hello world TypeScript file"}'
+
+# Check output
+curl http://localhost:3847/orchestrate/output/worker-1
+
+# Dismiss worker
+curl -X POST http://localhost:3847/orchestrate/dismiss/worker-1
+```
+
+### 2. MCP Tools (10 Available)
+
+| Tool | Description |
+|------|-------------|
+| `team_status` | Get team health and online agents |
+| `team_tasks` | List tasks for the team |
+| `team_assign` | Assign a task to a team member |
+| `team_complete` | Mark a task as complete |
+| `team_broadcast` | Send message to all team members |
+| `team_claim` | Claim a file to prevent conflicts |
+| `team_spawn` | Spawn a new worker agent (lead only) |
+| `team_dismiss` | Dismiss a worker (lead only) |
+| `team_workers` | List all active workers |
+| `team_send` | Send message to specific worker |
+
+### 3. Wave Orchestration (Continuation Loops)
+
+Supports iterative agent swarms with automatic continuation:
 
 ```
-open ──────► in_progress ──────► resolved
-                │
-                └──────► blocked (by other tasks)
+┌─────────────────────────────────────────────────────────────────┐
+│  Wave Iteration 1                                                │
+│  ├── Spawn agent: "design-auth"                                  │
+│  ├── Spawn agent: "implement-jwt"                                │
+│  └── Claude tries to exit...                                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Stop Hook Intercepts                                            │
+│  ├── Check: <wave-complete>? NO                                  │
+│  ├── Action: Feed same prompt back                               │
+│  └── Continue to next iteration                                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Wave Iteration 2                                                │
+│  ├── Read previous agent outputs                                 │
+│  ├── Synthesize results                                          │
+│  └── Output: <wave-complete>Done</wave-complete>                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Task Dependencies
-
-Tasks can block other tasks:
-
-```
-You: Create a task "Write tests" that's blocked by task-abc123
-
-Claude: Created task "Write tests"
-        Status: blocked
-        Blocked by: task-abc123 (must be resolved first)
-```
+Workers output `<wave-complete>PROMISE</wave-complete>` when done.
 
 ---
 
@@ -149,69 +126,131 @@ Claude: Created task "Write tests"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Your Machine                                │
+│                         Your Machine                                 │
 ├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   ┌─────────────────┐              ┌─────────────────┐              │
-│   │  Claude Code    │              │  Claude Code    │              │
-│   │  (Team Lead)    │              │  (Worker)       │              │
-│   │                 │              │                 │              │
-│   │  - Create tasks │              │  - Receive tasks│              │
-│   │  - Broadcast    │              │  - Update status│              │
-│   │  - Monitor      │              │  - Send messages│              │
-│   └────────┬────────┘              └────────┬────────┘              │
-│            │                                │                       │
-│            │         WebSocket              │                       │
-│            │      ◄──────────────►          │                       │
-│            │                                │                       │
-│            └────────────┬───────────────────┘                       │
-│                         │                                           │
-│                         ▼                                           │
-│              ┌─────────────────────┐                                │
-│              │   Local Server      │                                │
-│              │   (Express + WS)    │                                │
-│              │                     │                                │
-│              │   localhost:3847    │                                │
-│              └──────────┬──────────┘                                │
-│                         │                                           │
-│                         ▼                                           │
-│              ┌─────────────────────┐                                │
-│              │   SQLite Database   │                                │
-│              │                     │                                │
-│              │   - Users/Agents    │                                │
-│              │   - Chats           │                                │
-│              │   - Messages        │                                │
-│              │   - Tasks           │                                │
-│              └─────────────────────┘                                │
-│                                                                     │
+│                                                                      │
+│   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐ │
+│   │  Claude Code    │    │  Claude Code    │    │  Claude Code    │ │
+│   │  (Team Lead)    │    │  (Worker 1)     │    │  (Worker N)     │ │
+│   └────────┬────────┘    └────────┬────────┘    └────────┬────────┘ │
+│            │                      │                      │          │
+│            │      NDJSON Stream   │                      │          │
+│            └──────────────────────┼──────────────────────┘          │
+│                                   │                                  │
+│                                   ▼                                  │
+│              ┌─────────────────────────────────────┐                │
+│              │   TypeScript Server (v2.0)          │                │
+│              │   ├── Express REST API              │                │
+│              │   ├── WebSocket notifications       │                │
+│              │   ├── Worker Manager                │                │
+│              │   └── MCP Bridge (10 tools)         │                │
+│              │                                     │                │
+│              │   http://localhost:3847             │                │
+│              └──────────────┬──────────────────────┘                │
+│                             │                                        │
+│                             ▼                                        │
+│              ┌─────────────────────────────────────┐                │
+│              │   SQLite Database                   │                │
+│              │   ├── Agents & Teams                │                │
+│              │   ├── Tasks & Dependencies          │                │
+│              │   ├── Chats & Messages              │                │
+│              │   └── File Claims                   │                │
+│              └─────────────────────────────────────┘                │
+│                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Hidden Features Enabled
+## Project Structure
 
-This project patches Claude Code to enable these hidden feature flags:
-
-| Flag | Feature | What It Enables |
-|------|---------|-----------------|
-| `$q()` | Task Tools | TaskCreate, TaskGet, TaskUpdate, TaskList |
-| `NW1()` | Team Collaboration | Multi-agent messaging, broadcasts, team management |
-| `SQ1()` | Discover Command | `/discover` command for feature discovery |
+```
+claude-code-collab/
+├── src/
+│   ├── index.ts           # Entry point with graceful shutdown
+│   ├── server.ts          # Express + WebSocket server (600+ lines)
+│   ├── types.ts           # TypeScript interfaces
+│   ├── storage/
+│   │   └── sqlite.ts      # SQLite persistence layer
+│   ├── workers/
+│   │   └── manager.ts     # Worker spawning & NDJSON streaming
+│   ├── mcp/
+│   │   └── server.ts      # MCP bridge server (10 tools)
+│   └── utils/
+│       └── logger.ts      # Structured logging
+├── start.sh               # Server management script
+├── test-e2e.sh            # E2E test suite (11 tests)
+├── run-lead.sh            # Run as team lead
+├── run-worker.sh          # Run as worker
+├── patch-cli.js           # CLI patcher (enables hidden features)
+├── tsconfig.json          # TypeScript configuration
+└── package.json           # Dependencies
+```
 
 ---
 
-## Scripts Reference
+## API Reference
 
-| Script | Description |
-|--------|-------------|
-| `npm run patch:tasks` | Enable task tools only (no server needed) |
-| `npm run patch` | Enable all features (requires server) |
-| `npm start` | Start the collaboration server |
-| `npm run dev` | Start server with auto-reload |
-| `npm run test` | Run test suite (32 tests) |
-| `npm run e2e` | Run end-to-end integration test |
-| `npm run preflight` | Check environment readiness |
+### Health & Status
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Server health + stats |
+| `/debug` | GET | Debug information |
+
+### Authentication
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth` | POST | Register/authenticate agent |
+
+### Teams
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/teams/:name/agents` | GET | List team members |
+| `/teams/:name/tasks` | GET | List team tasks |
+| `/teams/:name/broadcast` | POST | Broadcast to team |
+
+### Tasks
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/tasks` | POST | Create task |
+| `/tasks/:id` | GET | Get task details |
+| `/tasks/:id` | PATCH | Update task status |
+
+### Worker Orchestration
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/orchestrate/spawn` | POST | Spawn worker |
+| `/orchestrate/workers` | GET | List workers |
+| `/orchestrate/send/:handle` | POST | Send message |
+| `/orchestrate/output/:handle` | GET | Get output |
+| `/orchestrate/dismiss/:handle` | POST | Dismiss worker |
+
+---
+
+## E2E Test Coverage
+
+```bash
+./test-e2e.sh
+```
+
+| Test | What It Validates |
+|------|-------------------|
+| Health Check | Server responds to `/health` |
+| Register Lead Agent | Lead can authenticate |
+| Register Worker Agent | Worker can authenticate |
+| Get Team Agents | Team membership tracking |
+| Create Task | Task creation via API |
+| Get Team Tasks | Task retrieval |
+| Update Task Status | Task state machine |
+| Broadcast Message | Team-wide notifications |
+| MCP Tools List | All 10 MCP tools available |
+| MCP team_status | MCP tool execution |
+| List Workers | Worker orchestration endpoint |
 
 ---
 
@@ -219,198 +258,85 @@ This project patches Claude Code to enable these hidden feature flags:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `TEAM_SERVER_PORT` | Server port | `3847` |
 | `CLAUDE_CODE_TEAM_NAME` | Team identifier | `dev-team` |
 | `CLAUDE_CODE_AGENT_TYPE` | `team-lead` or `worker` | `worker` |
-| `CLAUDE_CODE_AGENT_NAME` | Display name | `worker-1` |
+| `CLAUDE_CODE_AGENT_NAME` | Agent display name | `worker-1` |
 | `CLAUDE_CODE_COLLAB_URL` | Server URL | `http://localhost:3847` |
 | `JWT_SECRET` | Auth token secret | Auto-generated |
 | `JWT_EXPIRES_IN` | Token expiry | `24h` |
-
----
-
-## API Documentation
-
-Full OpenAPI spec available at `docs/openapi.yaml`.
-
-### Key Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Server health check |
-| `/auth` | POST | Register/authenticate agent (returns JWT) |
-| `/users/:uid` | GET | Get user details |
-| `/teams/:name/agents` | GET | List team members |
-| `/teams/:name/broadcast` | POST | Send message to entire team |
-| `/chats` | POST | Create chat between two users |
-| `/chats/:id/messages` | GET/POST | Get/send messages |
-| `/tasks` | POST | Create a task |
-| `/tasks/:id` | GET/PATCH | Get/update task |
-| `/teams/:name/tasks` | GET | List team tasks |
+| `LOG_LEVEL` | Logging level | `info` |
 
 ---
 
 ## Troubleshooting
 
-### "Cannot find Claude Code CLI"
+### Server won't start
 
-**Cause:** The patch script can't locate your Claude Code installation.
-
-**Fix:**
 ```bash
-# Option 1: Install Claude Code globally
-npm install -g @anthropic-ai/claude-code
-
-# Option 2: Run via npx first (creates local cache)
-npx @anthropic-ai/claude-code --version
-
-# Option 3: Set path manually
-export CLAUDE_CODE_CLI_PATH=/path/to/cli.js
-npm run patch
-```
-
-### "Server not running" when using run-lead.sh or run-worker.sh
-
-**Cause:** The collaboration server isn't started.
-
-**Fix:**
-```bash
-# Start the server first
-npm start
-
-# Then in another terminal
-./run-lead.sh
-```
-
-### WebSocket connection fails
-
-**Cause:** Server not running or wrong URL.
-
-**Fix:**
-```bash
-# Check server is running
-curl http://localhost:3847/health
-
-# Should return: {"status":"ok","persistence":"sqlite",...}
-```
-
-### "Database locked" error
-
-**Cause:** Multiple server instances trying to access the same database.
-
-**Fix:**
-```bash
-# Find and kill existing processes
+# Check if port is in use
 lsof -i :3847
+
+# Kill existing process
 kill <PID>
 
-# Or just restart
-pkill -f "node.*server.js"
-npm start
+# Or use the management script
+./start.sh --stop
+./start.sh --background
 ```
 
-### Patch says "already enabled"
-
-**Cause:** You've already patched this Claude Code installation.
-
-**Fix:** This is fine! The features are enabled. Just run `claude`.
-
-### Tasks not persisting
-
-**Cause:** Using task-tools-only mode (no server).
-
-**Note:** In task-tools-only mode, tasks are managed by Claude Code internally. For persistent, shared tasks across sessions, use full team mode with the server.
-
-### Windows: Scripts don't work
-
-**Cause:** Shell scripts are Unix-only.
-
-**Fix:** Use the Windows batch files:
-```cmd
-run-lead.bat
-run-worker.bat
-```
-
-### "Invalid or expired token" error
-
-**Cause:** JWT token expired (default: 24 hours).
-
-**Fix:** Re-authenticate by restarting your Claude Code instance.
-
----
-
-## Testing
-
-Run the full test suite:
+### Worker not responding
 
 ```bash
-npm run test
+# Check worker status
+curl http://localhost:3847/orchestrate/workers
+
+# Check worker output for errors
+curl http://localhost:3847/orchestrate/output/<handle>
+
+# Dismiss and respawn
+curl -X POST http://localhost:3847/orchestrate/dismiss/<handle>
 ```
 
-**Coverage: 32 tests**
-- Health checks (2)
-- Authentication (5)
-- User management (3)
-- Chat operations (2)
-- Message handling (4)
-- Mark as read validation (2)
-- Task management (7)
-- Task dependencies (5)
-- Broadcast (1)
-- WebSocket (2, requires websocat)
-- Rate limiting (1)
-
-Run end-to-end integration test:
+### MCP tools not working
 
 ```bash
-npm run e2e
+# Test MCP server directly
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  npx tsx src/mcp/server.ts
+
+# Should return 10 tools
 ```
 
 ---
 
-## Project Files
+## Development
 
-| File | Description |
-|------|-------------|
-| `server.js` | Express + WebSocket server (v1.2) |
-| `patch-cli.js` | Full patch (all features) |
-| `patch-tasks-only.js` | Lightweight patch (task tools only) |
-| `run-lead.sh` / `.bat` | Run as team lead |
-| `run-worker.sh` / `.bat` | Run as worker |
-| `docs/openapi.yaml` | API specification |
-| `scripts/test-suite.sh` | Comprehensive tests |
-| `scripts/e2e-test.sh` | End-to-end test |
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode (auto-reload)
+npm run dev
+
+# Type check
+npx tsc --noEmit
+
+# Run tests
+./test-e2e.sh
+```
 
 ---
 
-## How It Works
+## License
 
-1. **Patch Phase:** The patch script finds your Claude Code CLI, enables hidden feature flags (`$q`, `NW1`, `SQ1`), and injects code that redirects Firebase calls to your local server.
-
-2. **Server Phase:** The local Express server provides REST APIs and WebSocket connections that mimic Firebase's behavior, storing data in SQLite.
-
-3. **Runtime Phase:** When Claude Code runs, it thinks it's talking to Firebase but actually communicates with your local server.
+MIT - See [LICENSE](LICENSE)
 
 ---
 
 ## Disclaimer
 
-This project reverse-engineers hidden features in Claude Code for educational and experimental purposes. These features are disabled by default because they may be:
-
-- Unstable or incomplete
-- Subject to change without notice
-- Not officially supported
-
-**Use at your own risk.** This is not affiliated with or endorsed by Anthropic.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT - See [LICENSE](LICENSE)
+This project enables experimental features in Claude Code for educational and development purposes. These features may be unstable or change without notice. Not affiliated with or endorsed by Anthropic.
 
 ---
 
