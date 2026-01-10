@@ -19,6 +19,7 @@ import { SQLiteStorage } from './storage/sqlite.js';
 import { WorkerManager } from './workers/manager.js';
 import type {
   ServerConfig,
+  ServerMetrics,
   TeamAgent,
   TeamTask,
   Chat,
@@ -35,6 +36,7 @@ import type {
   BroadcastRequest,
   SpawnWorkerRequest,
   TaskStatus,
+  WorkerState,
 } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -118,6 +120,7 @@ export class CollabServer {
   private config: ServerConfig;
   private subscriptions = new Map<string, Set<ExtendedWebSocket>>();
   private rateLimits = new Map<string, { count: number; windowStart: number }>();
+  private startTime = Date.now();
 
   constructor(config?: Partial<ServerConfig>) {
     this.config = { ...getConfig(), ...config };
@@ -145,6 +148,9 @@ export class CollabServer {
     this.app.use(cors());
     this.app.use(express.json());
     this.app.use(this.rateLimitMiddleware.bind(this));
+
+    // Serve static files (dashboard)
+    this.app.use(express.static(path.join(__dirname, '..', 'public')));
   }
 
   private rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -199,6 +205,9 @@ export class CollabServer {
     // Health check
     this.app.get('/health', this.handleHealth.bind(this));
 
+    // Metrics endpoint
+    this.app.get('/metrics', this.handleMetrics.bind(this));
+
     // Authentication
     this.app.post('/auth', this.handleAuth.bind(this));
 
@@ -250,6 +259,57 @@ export class CollabServer {
       workers: this.workerManager.getWorkerCount(),
     };
     res.json(response);
+  }
+
+  private handleMetrics(_req: Request, res: Response): void {
+    const debug = this.storage.getDebugInfo();
+    const healthStats = this.workerManager.getHealthStats();
+    const restartStats = this.workerManager.getRestartStats();
+    const workers = this.workerManager.getWorkers();
+
+    // Count workers by state
+    const byState: Record<WorkerState, number> = {
+      starting: 0,
+      ready: 0,
+      working: 0,
+      stopping: 0,
+      stopped: 0,
+    };
+    for (const worker of workers) {
+      byState[worker.state]++;
+    }
+
+    // Count tasks by status
+    const byStatus: Record<TaskStatus, number> = {
+      open: 0,
+      in_progress: 0,
+      resolved: 0,
+      blocked: 0,
+    };
+    for (const task of debug.tasks) {
+      byStatus[task.status]++;
+    }
+
+    const metrics: ServerMetrics = {
+      uptime: Date.now() - this.startTime,
+      workers: {
+        total: healthStats.total,
+        healthy: healthStats.healthy,
+        degraded: healthStats.degraded,
+        unhealthy: healthStats.unhealthy,
+        byState,
+      },
+      tasks: {
+        total: debug.tasks.length,
+        byStatus,
+      },
+      agents: debug.users.length,
+      chats: debug.chats.length,
+      messages: debug.messageCount,
+      restarts: restartStats,
+    };
+
+    res.json(metrics);
   }
 
   private handleAuth(req: Request, res: Response): void {

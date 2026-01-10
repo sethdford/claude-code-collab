@@ -168,6 +168,38 @@ export interface WorkerProcess {
   spawnedAt: number;
   /** Current task ID (if any) */
   currentTaskId: string | null;
+  /** Last heartbeat timestamp */
+  lastHeartbeat: number;
+  /** Number of auto-restarts */
+  restartCount: number;
+  /** Health status */
+  health: 'healthy' | 'degraded' | 'unhealthy';
+}
+
+// ============================================================================
+// METRICS TYPES
+// ============================================================================
+
+export interface ServerMetrics {
+  uptime: number;
+  workers: {
+    total: number;
+    healthy: number;
+    degraded: number;
+    unhealthy: number;
+    byState: Record<WorkerState, number>;
+  };
+  tasks: {
+    total: number;
+    byStatus: Record<TaskStatus, number>;
+  };
+  agents: number;
+  chats: number;
+  messages: number;
+  restarts: {
+    total: number;
+    lastHour: number;
+  };
 }
 
 export interface SpawnWorkerRequest {

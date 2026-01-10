@@ -5,12 +5,11 @@
  * Uses child_process.spawn with NDJSON streaming for bidirectional communication.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   WorkerProcess,
-  WorkerState,
   ClaudeEvent,
   SpawnWorkerRequest,
   SpawnWorkerResponse,
@@ -24,23 +23,142 @@ export interface WorkerManagerEvents {
   'worker:result': { workerId: string; handle: string; result: string; durationMs?: number };
   'worker:error': { workerId: string; handle: string; error: string };
   'worker:exit': { workerId: string; handle: string; code: number | null };
+  'worker:unhealthy': { workerId: string; handle: string; reason: string };
+  'worker:restart': { workerId: string; handle: string; restartCount: number };
 }
+
+const HEARTBEAT_INTERVAL = 10000; // 10 seconds
+const HEALTH_CHECK_INTERVAL = 15000; // 15 seconds
+const HEALTHY_THRESHOLD = 30000; // 30 seconds without activity = degraded
+const UNHEALTHY_THRESHOLD = 60000; // 60 seconds = unhealthy
+const MAX_RESTART_ATTEMPTS = 3;
 
 export class WorkerManager extends EventEmitter {
   private workers = new Map<string, WorkerProcess>();
   private maxWorkers: number;
   private defaultTeamName: string;
   private serverUrl: string;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private autoRestart: boolean;
+  private restartHistory: number[] = []; // timestamps of restarts
 
   constructor(options: {
     maxWorkers?: number;
     defaultTeamName?: string;
     serverUrl?: string;
+    autoRestart?: boolean;
   } = {}) {
     super();
     this.maxWorkers = options.maxWorkers ?? 5;
     this.defaultTeamName = options.defaultTeamName ?? 'default';
     this.serverUrl = options.serverUrl ?? 'http://localhost:3847';
+    this.autoRestart = options.autoRestart ?? true;
+    this.startHealthCheck();
+  }
+
+  /**
+   * Start periodic health checking
+   */
+  private startHealthCheck(): void {
+    this.healthCheckInterval = setInterval(() => {
+      this.checkWorkerHealth();
+    }, HEALTH_CHECK_INTERVAL);
+  }
+
+  /**
+   * Check health of all workers
+   */
+  private checkWorkerHealth(): void {
+    const now = Date.now();
+    for (const worker of this.workers.values()) {
+      if (worker.state === 'stopped' || worker.state === 'stopping') continue;
+
+      const timeSinceHeartbeat = now - worker.lastHeartbeat;
+      const previousHealth = worker.health;
+
+      if (timeSinceHeartbeat > UNHEALTHY_THRESHOLD) {
+        worker.health = 'unhealthy';
+        if (previousHealth !== 'unhealthy') {
+          console.log(`[HEALTH] ${worker.handle} is unhealthy (${Math.round(timeSinceHeartbeat / 1000)}s since activity)`);
+          this.emit('worker:unhealthy', {
+            workerId: worker.id,
+            handle: worker.handle,
+            reason: `No activity for ${Math.round(timeSinceHeartbeat / 1000)}s`,
+          });
+
+          // Auto-restart if enabled
+          if (this.autoRestart && worker.restartCount < MAX_RESTART_ATTEMPTS) {
+            this.restartWorker(worker.id);
+          }
+        }
+      } else if (timeSinceHeartbeat > HEALTHY_THRESHOLD) {
+        worker.health = 'degraded';
+      } else {
+        worker.health = 'healthy';
+      }
+    }
+  }
+
+  /**
+   * Restart a worker
+   */
+  async restartWorker(workerId: string): Promise<void> {
+    const worker = this.workers.get(workerId);
+    if (!worker) return;
+
+    const restartCount = worker.restartCount + 1;
+    console.log(`[RESTART] Restarting ${worker.handle} (attempt ${restartCount}/${MAX_RESTART_ATTEMPTS})`);
+
+    // Save worker config for respawn
+    const config: SpawnWorkerRequest = {
+      handle: worker.handle,
+      teamName: worker.teamName,
+      workingDir: worker.workingDir,
+      sessionId: worker.sessionId ?? undefined,
+    };
+
+    // Dismiss the old worker
+    await this.dismissWorker(workerId);
+
+    // Track restart
+    this.restartHistory.push(Date.now());
+
+    // Respawn with incremented restart count
+    try {
+      const newWorker = await this.spawnWorker(config);
+      const newProcess = this.workers.get(newWorker.id);
+      if (newProcess) {
+        newProcess.restartCount = restartCount;
+      }
+      this.emit('worker:restart', {
+        workerId: newWorker.id,
+        handle: worker.handle,
+        restartCount,
+      });
+    } catch (error) {
+      console.error(`[RESTART] Failed to restart ${worker.handle}:`, (error as Error).message);
+    }
+  }
+
+  /**
+   * Get restart stats
+   */
+  getRestartStats(): { total: number; lastHour: number } {
+    const oneHourAgo = Date.now() - 3600000;
+    return {
+      total: this.restartHistory.length,
+      lastHour: this.restartHistory.filter(t => t > oneHourAgo).length,
+    };
+  }
+
+  /**
+   * Update worker heartbeat
+   */
+  private updateHeartbeat(worker: WorkerProcess): void {
+    worker.lastHeartbeat = Date.now();
+    if (worker.health === 'unhealthy' || worker.health === 'degraded') {
+      worker.health = 'healthy';
+    }
   }
 
   /**
@@ -88,6 +206,7 @@ export class WorkerManager extends EventEmitter {
       },
     });
 
+    const now = Date.now();
     const worker: WorkerProcess = {
       id: workerId,
       handle: request.handle,
@@ -97,8 +216,11 @@ export class WorkerManager extends EventEmitter {
       workingDir,
       state: 'starting',
       recentOutput: [],
-      spawnedAt: Date.now(),
+      spawnedAt: now,
       currentTaskId: null,
+      lastHeartbeat: now,
+      restartCount: 0,
+      health: 'healthy',
     };
 
     this.workers.set(workerId, worker);
@@ -196,6 +318,9 @@ export class WorkerManager extends EventEmitter {
    * Handle a Claude Code event
    */
   private handleClaudeEvent(worker: WorkerProcess, event: ClaudeEvent): void {
+    // Update heartbeat on any event
+    this.updateHeartbeat(worker);
+
     // Track session ID from init
     if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
       worker.sessionId = event.session_id;
@@ -373,9 +498,27 @@ export class WorkerManager extends EventEmitter {
   }
 
   /**
+   * Get worker health statistics
+   */
+  getHealthStats(): { total: number; healthy: number; degraded: number; unhealthy: number } {
+    let healthy = 0, degraded = 0, unhealthy = 0;
+    for (const worker of this.workers.values()) {
+      if (worker.health === 'healthy') healthy++;
+      else if (worker.health === 'degraded') degraded++;
+      else unhealthy++;
+    }
+    return { total: this.workers.size, healthy, degraded, unhealthy };
+  }
+
+  /**
    * Dismiss all workers
    */
   async dismissAll(): Promise<void> {
+    // Stop health check
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
     const workers = Array.from(this.workers.keys());
     await Promise.all(workers.map((id) => this.dismissWorker(id)));
   }

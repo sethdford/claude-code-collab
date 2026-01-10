@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code Collab - Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117; color: #c9d1d9; padding: 20px;
+    }
+    h1 { color: #58a6ff; margin-bottom: 20px; }
+    h2 { color: #8b949e; font-size: 14px; text-transform: uppercase; margin: 20px 0 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px;
+    }
+    .card-title { color: #8b949e; font-size: 12px; text-transform: uppercase; }
+    .card-value { font-size: 32px; font-weight: bold; color: #58a6ff; }
+    .card-value.green { color: #3fb950; }
+    .card-value.yellow { color: #d29922; }
+    .card-value.red { color: #f85149; }
+    .workers-list { margin-top: 20px; }
+    .worker {
+      background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+      padding: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    }
+    .worker-status { width: 12px; height: 12px; border-radius: 50%; }
+    .worker-status.healthy { background: #3fb950; }
+    .worker-status.degraded { background: #d29922; }
+    .worker-status.unhealthy { background: #f85149; }
+    .worker-handle { font-weight: bold; color: #c9d1d9; }
+    .worker-state { color: #8b949e; font-size: 12px; }
+    .events {
+      background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      height: 300px; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 12px;
+    }
+    .event { margin-bottom: 5px; padding: 5px; border-radius: 4px; }
+    .event.spawn { background: rgba(56, 139, 253, 0.1); border-left: 3px solid #388bfd; }
+    .event.output { background: rgba(63, 185, 80, 0.1); border-left: 3px solid #3fb950; }
+    .event.dismiss { background: rgba(248, 81, 73, 0.1); border-left: 3px solid #f85149; }
+    .connection { 
+      position: fixed; top: 20px; right: 20px; padding: 8px 12px;
+      border-radius: 20px; font-size: 12px; font-weight: bold;
+    }
+    .connection.connected { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+    .connection.disconnected { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+  </style>
+</head>
+<body>
+  <div class="connection disconnected" id="connection">Disconnected</div>
+  <h1>Claude Code Collab Dashboard</h1>
+  
+  <h2>Overview</h2>
+  <div class="grid">
+    <div class="card"><div class="card-title">Uptime</div><div class="card-value" id="uptime">-</div></div>
+    <div class="card"><div class="card-title">Workers</div><div class="card-value" id="workers">0</div></div>
+    <div class="card"><div class="card-title">Healthy</div><div class="card-value green" id="healthy">0</div></div>
+    <div class="card"><div class="card-title">Tasks</div><div class="card-value" id="tasks">0</div></div>
+    <div class="card"><div class="card-title">Restarts (1h)</div><div class="card-value yellow" id="restarts">0</div></div>
+    <div class="card"><div class="card-title">Agents</div><div class="card-value" id="agents">0</div></div>
+  </div>
+
+  <h2>Active Workers</h2>
+  <div class="workers-list" id="workers-list"><div style="color: #8b949e;">No active workers</div></div>
+
+  <h2>Real-Time Events</h2>
+  <div class="events" id="events"></div>
+
+  <script>
+    const SERVER = 'http://localhost:3847';
+    let ws;
+
+    function fmt(ms) {
+      const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
+      return h > 0 ? h+'h '+m%60+'m' : m > 0 ? m+'m '+s%60+'s' : s+'s';
+    }
+
+    function log(type, text) {
+      const el = document.getElementById('events');
+      const div = document.createElement('div');
+      div.className = 'event ' + type;
+      div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+      el.insertBefore(div, el.firstChild);
+      if (el.children.length > 100) el.removeChild(el.lastChild);
+    }
+
+    async function refresh() {
+      try {
+        const m = await fetch(SERVER + '/metrics').then(r => r.json());
+        document.getElementById('uptime').textContent = fmt(m.uptime);
+        document.getElementById('workers').textContent = m.workers.total;
+        document.getElementById('healthy').textContent = m.workers.healthy;
+        document.getElementById('tasks').textContent = m.tasks.total;
+        document.getElementById('restarts').textContent = m.restarts.lastHour;
+        document.getElementById('agents').textContent = m.agents;
+        
+        const w = await fetch(SERVER + '/orchestrate/workers').then(r => r.json());
+        const list = document.getElementById('workers-list');
+        list.innerHTML = w.length === 0 ? '<div style="color:#8b949e">No active workers</div>' :
+          w.map(x => '<div class="worker"><div class="worker-status '+(x.health||'healthy')+'"></div><div><div class="worker-handle">'+x.handle+'</div><div class="worker-state">'+x.state+' • '+x.teamName+'</div></div></div>').join('');
+      } catch(e) {}
+    }
+
+    function connect() {
+      ws = new WebSocket('ws://localhost:3847/ws');
+      ws.onopen = () => { document.getElementById('connection').className='connection connected'; document.getElementById('connection').textContent='Connected'; log('output','WebSocket connected'); };
+      ws.onclose = () => { document.getElementById('connection').className='connection disconnected'; document.getElementById('connection').textContent='Disconnected'; setTimeout(connect, 3000); };
+      ws.onmessage = (e) => {
+        const m = JSON.parse(e.data);
+        if (m.type === 'worker_spawned') { log('spawn', 'Worker spawned: ' + m.worker.handle); refresh(); }
+        else if (m.type === 'worker_output') { log('output', m.handle + ': output'); }
+        else if (m.type === 'worker_dismissed') { log('dismiss', 'Worker dismissed: ' + m.handle); refresh(); }
+      };
+    }
+
+    refresh(); connect(); setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
